@@ -53,4 +53,4 @@ Le matériel utilisé pour ce projet — liens affiliés Amazon :
 
 ## 📄 Licence
 
-MIT — voir [LICENSE](LICENSE). Par **koua29** (Arnaud). Signatures : projet flock-you / deflock.me.
+MIT — voir [LICENSE](LICENSE). Par **koua29**. Signatures : projet flock-you / deflock.me.
