@@ -8,14 +8,23 @@ Script **JavaScript** pour le firmware **[Bruce](https://github.com/BruceDevices
 
 ![Flock Detector — état RAS](docs/ras.jpg)
 
-## ✨ Fonctionnalités
+## ✨ Fonctionnalités (v2)
 
-- **Scan WiFi en boucle** ; pour chaque réseau :
-  - **SSID contient « flock »** → 🔴 rouge, **fiable**.
-  - **OUI ∈ liste des 30 préfixes Flock** → 🟠 ambre, **« à confirmer »** (certains OUIs sont des préfixes Espressif génériques → faux positif possible).
-- **Compteur** de suspects + **liste triée par RSSI** (le plus proche en haut : SSID / MAC / canal).
-- **Barre de proximité** sur le plus fort pour te rapprocher.
-- **« RAS »** vert quand rien n'est détecté.
+- **Scan WiFi en boucle** avec un **modèle de confiance à 4 niveaux** (repris des recherches flock-you / FlipDeFlock) :
+
+  | Niveau | Règle | Couleur |
+  |---|---|---|
+  | 🔴 **CONFIRMED** | SSID `Flock-XXXXXX` (6 hex, ancré) **ou** `test_flck` (SSID de dev, **CVE-2025-59409**) → auto-identifiant | rouge |
+  | 🟠 **LIKELY** | SSID contient `flock` | orange |
+  | 🟡 **POSSIBLE** | MAC OUI ∈ **32 préfixes corroborés** | ambre |
+  | ⚪ **WEAK** | MAC OUI ∈ liste **seed** (réelle mais non vérifiée terrain) | gris |
+
+  > L'OUI seul est **faible volontairement** : certains préfixes (`a4:cf:12`, `3c:71:bf`…) sont des plages **Espressif génériques** partagées par d'innombrables ESP32 → faux positifs. Le signal fort, c'est le **SSID**.
+
+- **🔊 Bip Geiger** — cadence et hauteur qui **accélèrent en te rapprochant** (mains libres, tu marches sans fixer l'écran). Coupe-le avec `BEEP = false`.
+- **💾 Log SD (CSV)** — chaque **nouvelle** détection écrite dans `/flock_log.csv` (`time,ssid,mac,rssi,canal,niveau,raison`). Coupe-le avec `LOG = false`.
+- **Persistance inter-scans** — une cible perdue sur un scan flaky **reste affichée** (TTL 20 s, grisée quand ancienne) au lieu de disparaître/clignoter.
+- **Liste triée** par niveau puis RSSI, **barre de proximité** sur la cible vivante la plus forte, **« CLEAR »** vert quand rien n'est détecté.
 
 ## 🚀 Installation
 
@@ -23,13 +32,14 @@ Script **JavaScript** pour le firmware **[Bruce](https://github.com/BruceDevices
 2. Sur l'appareil : **JS Interpreter** → ouvre `Flock Detector.js`.
 3. **Maintiens le bouton ESC / retour** pour quitter (le scan WiFi bloque ~4 s ; une fenêtre réactive capte l'appui entre deux scans).
 
-## 🔎 Signatures
+## 🔎 Signatures & sources
 
-- **30 OUIs WiFi** (préfixes MAC) issus du projet **[flock-you](https://github.com/colonelpanichacks/flock-you)** et du dataset **[deflock.me](https://deflock.me)**.
-- Mot-clé SSID : **`flock`**.
-- *(Signal BLE : manufacturer ID `0x09C8` — non exploitable via l'API `ble.scan` de Bruce, réservé à une future version firmware.)*
+- **32 OUIs corroborés** (`OUI_CONF`) — recherche promiscuous de **[@NitekryDPaul](https://github.com/nitekry/nite-oui-collection)** (`my_tested_flock`, synchro **2026-07-16**) + le 32ᵉ (`82:6b:f2`) du drive-testing **[DeFlockJoplin](https://github.com/DeflockJoplin/flock-you)**.
+- **6 OUIs seed** (`OUI_SEED`) — candidats **non vérifiés terrain** de **[FlipDeFlock](https://github.com/ReconGrunt/FlipDeFlock)** / WatchFlock.
+- **Règles SSID** : `Flock-XXXXXX` (ancré) et `test_flck` (dev, **CVE-2025-59409**) = confirmés ; `flock` (sous-chaîne) = probable.
+- *(Signal BLE : réservé à une future version firmware — l'API `ble.scan` de Bruce ne donne pas les fingerprints IE nécessaires.)*
 
-Tu peux enrichir `FLOCK_OUIS` et `SSID_KEYWORDS` en tête du script.
+Tu peux enrichir `OUI_CONF`, `OUI_SEED` et les règles SSID en tête du script. Autres bases : **[colonelpanichacks/flock-you](https://github.com/colonelpanichacks/flock-you)**, **[deflock.me](https://deflock.me)**.
 
 ## ⚠️ Portée & limites (honnêtes)
 
