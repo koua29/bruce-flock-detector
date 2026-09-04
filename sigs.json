@@ -1,5 +1,5 @@
 {
- "version": "2026-09-04.1",
+ "version": "2026-09-04",
  "cam_ssid_conf": [
   [
    "^mv\\d{8}$",
@@ -80,6 +80,14 @@
   [
    "^ring[ _-]?setup",
    "Ring"
+  ],
+  [
+   "^nax_",
+   "Naxclow"
+  ],
+  [
+   "^ipc[-_]",
+   "IPcam"
   ]
  ],
  "cam_ssid_like": [
@@ -220,6 +228,42 @@
    "Coolcam"
   ],
   [
+   "tuya",
+   "Tuya"
+  ],
+  [
+   "carecam",
+   "CareCam"
+  ],
+  [
+   "littlestars",
+   "LittleStars"
+  ],
+  [
+   "hopeway",
+   "HopeWay"
+  ],
+  [
+   "naxclow",
+   "Naxclow"
+  ],
+  [
+   "imcam",
+   "iMCam"
+  ],
+  [
+   "tutk",
+   "TUTK"
+  ],
+  [
+   "xiaoin",
+   "XiaoIn"
+  ],
+  [
+   "iwfcam",
+   "iWFCam"
+  ],
+  [
    "ipcamera",
    "IPcam"
   ],
@@ -262,22 +306,6 @@
   [
    "camera",
    "camera"
-  ],
-  [
-   "imcam",
-   "iMCam"
-  ],
-  [
-   "tutk",
-   "TUTK"
-  ],
-  [
-   "xiaoin",
-   "XiaoIn"
-  ],
-  [
-   "iwfcam",
-   "iWFCam"
   ]
  ],
  "cam_oui": [

@@ -1,124 +1,166 @@
-# 🛰️ Flock Detector — détecteur de caméras de surveillance pour Bruce
+# 🛰️ Flock Detector — surveillance-camera detector for Bruce
 
-[![Bruce firmware](https://img.shields.io/badge/firmware-Bruce-8A2BE2?logo=github)](https://github.com/BruceDevices/firmware) [![Device](https://img.shields.io/badge/device-LilyGO%20T--Embed%20CC1101-1E90FF)](https://github.com/BruceDevices/firmware) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Bruce firmware](https://img.shields.io/badge/firmware-Bruce-8A2BE2?logo=github)](https://github.com/pr3y/Bruce) [![Device](https://img.shields.io/badge/device-LilyGO%20T--Embed%20CC1101-1E90FF)](https://github.com/pr3y/Bruce) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **EN** — A **counter-surveillance** script (JavaScript) for the **[Bruce firmware](https://github.com/BruceDevices/firmware)** on the LilyGO T-Embed CC1101. It scans WiFi and flags **Flock Safety** (and similar) surveillance cameras by their **MAC OUI** or an SSID containing `flock`, sorted by signal so you can locate the nearest one. Defensive / privacy research only.
+A **counter-surveillance** JavaScript app for the **[Bruce firmware](https://github.com/pr3y/Bruce)** (tested on **LilyGO T-Embed CC1101**). It scans 2.4 GHz Wi-Fi and flags:
 
-Script **JavaScript** pour le firmware **[Bruce](https://github.com/BruceDevices/firmware)** (testé sur **LilyGO T-Embed CC1101**). Il scanne le WiFi et **signale les caméras de surveillance type Flock Safety** par leur **préfixe MAC (OUI)** ou un **SSID contenant `flock`**, triées par puissance pour repérer la plus proche. Outil **défensif / vie privée**.
+- **Flock Safety** (and similar) **ALPR** cameras, and
+- cheap **Chinese Wi-Fi "spy" cameras** (AliExpress/Amazon),
 
-![Flock Detector — état RAS](docs/ras.jpg)
+by their **MAC OUI** or their **setup-AP SSID**, ranked by a 4-level confidence model and by signal strength so you can walk toward the nearest one (Geiger beep). A separate **LAN scan** mode finds cameras already joined to the Wi-Fi you're on. **Defensive / privacy research only.**
 
-## ✨ Fonctionnalités (v2)
+<p align="center">
+  <img src="docs/ui-radar.svg" width="330" alt="Camera radar screen">
+  &nbsp;
+  <img src="docs/ui-catalog.svg" width="330" alt="Camera catalog screen">
+</p>
 
-- **Scan WiFi en boucle** avec un **modèle de confiance à 4 niveaux** (repris des recherches flock-you / FlipDeFlock) :
+> ## ⚠️ Authorized use only
+> Use this **solely** to check for surveillance devices around **you**, or networks/spaces you are **authorized** to inspect. It is a **passive receiver** — it never connects to, streams from, deauths, or exploits anything. Respect your local law.
 
-  | Niveau | Règle | Couleur |
-  |---|---|---|
-  | 🔴 **CONFIRMED** | SSID `Flock-XXXXXX` (6 hex, ancré) **ou** `test_flck` (SSID de dev, **CVE-2025-59409**) → auto-identifiant | rouge |
-  | 🟠 **LIKELY** | SSID contient `flock` | orange |
-  | 🟡 **POSSIBLE** | MAC OUI ∈ **32 préfixes corroborés** | ambre |
-  | ⚪ **WEAK** | MAC OUI ∈ liste **seed** (réelle mais non vérifiée terrain) | gris |
+## 🧭 Menu map
 
-  > L'OUI seul est **faible volontairement** : certains préfixes (`a4:cf:12`, `3c:71:bf`…) sont des plages **Espressif génériques** partagées par d'innombrables ESP32 → faux positifs. Le signal fort, c'est le **SSID**.
+```mermaid
+flowchart TD
+  A([DETECTOR v3 — ESC quits]):::root --> W[WiFi scan]:::cat
+  A --> L[LAN scan]:::cat
+  A --> C[Cam list]:::cat
+  W --> W1[Hidden cams<br/>~119 cam signatures]
+  W --> W2[Flock ALPR<br/>41 signatures]
+  W --> W3[Both]
+  L --> L1[Camera hosts<br/>port + HTTP-banner scan]
+  C --> C1[Brands and models<br/>scrollable catalog]
+  C --> C2[Flock signals]
+  classDef root fill:#0b3a5a,stroke:#5ac8ff,color:#eaf6ff;
+  classDef cat fill:#14202c,stroke:#5ac8ff,color:#eaf6ff;
+```
 
-- **🔊 Bip Geiger** — cadence et hauteur qui **accélèrent en te rapprochant** (mains libres, tu marches sans fixer l'écran). Coupe-le avec `BEEP = false`.
-- **💾 Log SD (CSV)** — chaque **nouvelle** détection écrite dans `/flock_log.csv` (`time,ssid,mac,rssi,canal,niveau,raison`). Coupe-le avec `LOG = false`.
-- **Persistance inter-scans** — une cible perdue sur un scan flaky **reste affichée** (TTL 20 s, grisée quand ancienne) au lieu de disparaître/clignoter.
-- **Liste triée** par niveau puis RSSI, **barre de proximité** sur la cible vivante la plus forte, **« CLEAR »** vert quand rien n'est détecté.
+<p align="center">
+  <img src="docs/ui-menu.svg" width="250" alt="Two-level menu">
+  <img src="docs/ui-lan.svg" width="250" alt="LAN cam results">
+  <img src="docs/ui-clear.svg" width="250" alt="Clear screen">
+</p>
 
-## 📷 Mode « Hidden Cams » — caméras espion chinoises (v3)
+## 🎯 Confidence model
 
-Au lancement, un **menu à deux niveaux** (catégorie → sous-catégorie) :
+Every hit is ranked, because **OUI alone is weak** (many camera/ALPR modules share generic Espressif/HiSilicon MAC ranges used by countless devices). The **SSID is the reliable signal.**
 
-- **WiFi scan** → Hidden cams · Flock (ALPR) · Both
-- **LAN scan** → Camera hosts (voir plus bas)
-- **Database** → **Update cams** (télécharge les signatures depuis GitHub) · Show counts
+| Tier | Rule | Colour |
+|---|---|---|
+| 🔴 **CONFIRMED** | self-identifying SSID: `Flock-XXXXXX`, `test_flck` (**CVE-2025-59409**), or a camera setup-AP name (e.g. `MV########`, `GW_IPC…`, `IPCAM-…`) | red |
+| 🟠 **LIKELY** | SSID contains a brand / keyword (`flock`, `v380`, `ipcam`, …) | orange |
+| 🟡 **POSSIBLE** | MAC OUI in a corroborated / camera-brand list | amber |
+| ⚪ **WEAK** | MAC OUI in an unverified "seed" list | grey |
 
-Le **nombre de signatures dans la base** est affiché à l'écran (splash + bas de l'écran). Le mode caméra cible les **caméras WiFi bon marché** (AliExpress/Amazon, apps V380/Yoosee/iCSee/JXLCAM/CamHi/UBox/Linklemo/FtyCam/O-KAM/Zosi…) — **~108 signatures caméra** :
+Extras: **🔊 Geiger beep** (faster/higher as you close in), **💾 SD CSV log** (`/flock_log.csv`), **cross-scan persistence** (a target lost on a flaky scan stays on screen, greyed, for 20 s), and a live **networks-scanned counter**. Toggle with `BEEP` / `LOG` at the top of the script.
 
-- 🔴 **CONFIRMED — SSID de setup/AP** (très distinctif) : `MVxxxxxxxx` (V380), `GW_IPC…`/`GW_AP…` (Yoosee), `ACCQ…`/`CAMS_…`/`A9mini…` (A9), `JXLCAM`, `HDWiFiCam`, `V720`, `IPCAM-xxxxxx` (CamHi/CamHiPro), `DGK-xxx-xxx`, `CAM_xxxx`, `ESCAM-…`, `GENBOLT…`, `EZVIZ_<serial>` (EZVIZ), `UBox_…` (app UBox), `LLM_…` (app Linklemo), `FTY…` (FtyCam/FtyCamPro), `@MC…` (O-KAM), `IPC_AP_…` (Zosi).
-- 🟠 **LIKELY — marque/mot-clé dans le SSID** : SmartLife/Tuya, YCC365, CloudEdge, iCSee, XMEye, Xiaomi (chuangmi), Anran, Sricam, ESCAM, Anbiux, Foscam, ieGeek, GENBOLT, LookCam, CamHi, Fredi, TinyCam, HDSmartIPC, Reolink, EZVIZ, UBox, Linklemo, ULar, UCOCARE, WIWACAM, HDMiniCam, FtyCam, O-KAM, Zosi, VStarcam, Coolcam + génériques `ipcam / webcam / spycam / wificam / netcam / smartcam / minicam / ptz / cctv / camera`.
+## 🚀 Install
 
-### 🔄 Mettre à jour la base sans reflasher (Database → Update cams)
+1. Copy **`Flock Detector.js`** onto the SD card, in a folder Bruce reads: **`/BruceJS`**, `/scripts` or `/BruceScripts`.
+2. On the device: **JS Interpreter** → open `Flock Detector.js`.
+3. Pick a category → mode. **ESC** quits from the top menu, or goes back one level from a submenu.
 
-Les signatures caméra vivent aussi dans **[`sigs.json`](sigs.json)** à la racine du repo. Le menu **Database → Update cams** télécharge ce fichier depuis GitHub (`raw.githubusercontent.com/koua29/bruce-flock-detector/main/sigs.json`), **fusionne** les nouveautés dans la base en mémoire (dédupliquées) et **met en cache sur SD** (`/flock_sigs.json`). Au démarrage suivant, le cache SD est rechargé automatiquement → **plus besoin de rééditer le script** pour ajouter des caméras : il suffit que `sigs.json` soit enrichi côté repo. (Nécessite que le LilyGO soit connecté au WiFi/Internet.)
+## 📷 Hidden-cam signatures
 
-> ⚠️ **Le HTTPS peut échouer sur Bruce** (la pile TLS de l'ESP32 manque parfois de RAM, et GitHub n'est accessible qu'en HTTPS). Si **Update cams** affiche `Download failed`, l'écran donne l'erreur exacte **et la parade hors-ligne, garantie** :
->
-> **MàJ hors-ligne (sans internet)** : copie [`sigs.json`](sigs.json) sur la **carte SD** sous le nom **`/flock_sigs.json`** (racine SD) — via la WebUI Bruce ou un lecteur de carte. Il est **rechargé et fusionné automatiquement au démarrage** (`loadCachedSigs`). Aucun TLS requis.
+Most cheap no-name cameras **don't broadcast their brand name** — they reuse a shared **P2P app**, and the SSID comes from that app/chipset. Find the app (printed on the box / in the App Store) and match its prefix below.
 
-Format `sigs.json` : `cam_ssid_conf` `[["regex","label"]]`, `cam_ssid_like` `[["substr","label"]]`, `cam_oui` `[["oui","vendor"]]`, `flock_oui` `["oui"]`, `flock_seed` `["oui"]`.
+<!-- BRANDS_TABLE_START -->
+### Confirmed setup-AP SSID prefixes
 
-### 🌐 Mode « LAN cams » — caméras déjà connectées au WiFi
+| Brand / app | Setup SSID looks like |
+|---|---|
+| **A9** | `CAMS_…` |
+| **A9mini** | `A9MINI…` |
+| **CamHi** | `IPCAM-…` |
+| **DGK** | `DGK-…` |
+| **ESCAM** | `ESCAM-…` |
+| **EZVIZ** | `EZVIZ-…` |
+| **FtyCam** | `FTY…` |
+| **GENBOLT** | `GENBOLT…` |
+| **HDWiFiCam** | `HDWIFICAM…` |
+| **IPcam** | `CAM_X…`, `IPC-…` |
+| **JXLCAM** | `JXLCAM…` |
+| **JXLCAM/A9** | `ACCQ…` |
+| **Linklemo** | `LLM_…` |
+| **Naxclow** | `NAX_…` |
+| **O-KAM** | `@MC…` |
+| **Ring** | `RINGSETUP…` |
+| **UBox** | `UBOX_…` |
+| **V380** | `MV########…` |
+| **V720** | `V720…` |
+| **Yoosee** | `GW_IPC…` |
+| **Zosi** | `IPC_AP…` |
 
-Sur le réseau WiFi auquel le LilyGO est **connecté**, ce mode balaie le sous-réseau et repère les **hôtes caméra** par leurs **ports** (`554`/`8554` RTSP, `37777` Dahua, `34567` XiongMai, `8000` Hikvision, `8899` ONVIF) et la **bannière HTTP** (Hikvision/Dahua/Reolink/Foscam/ONVIF…). C'est le complément du scan RF : il attrape la cam **déjà appairée** (client silencieux), invisible en scan d'AP.
+### Camera-brand MAC OUIs (POSSIBLE tier)
 
-> ⚠️ **Limites (firmware Bruce)** : l'interpréteur JS n'expose que `httpFetch` (pas de socket brut, pas d'UDP, pas d'ARP) → détection **par ports + bannière uniquement, sans OUI/MAC**, et **pas de ONVIF WS-Discovery**. Le timeout de connexion **n'est pas réglable** (`httpFetch` n'a aucune option de timeout) → **on ne peut pas raccourcir l'attente d'une IP morte**. La parade n'est donc pas « éviter les IP mortes » (impossible : on ne le sait qu'après le timeout) mais **en sonder beaucoup moins** :
-> - balayage **d'une fenêtre autour de notre propre IP** (`LAN_SPAN`, ±25 par défaut) + la passerelle — le DHCP attribue les adresses en grappe, donc peu d'IP mortes ;
-> - **une seule sonde par IP** (port `554` d'abord : ouvert = cam, RST = hôte vivant qu'on creuse, timeout = mort → on passe).
->
-> Pendant une sonde bloquante, le JS est figé : **ESC n'est lu qu'entre deux sondes** → **maintiens ESC**, l'arrêt se fait dès la fin de la sonde en cours. Règle `LAN_SPAN` en tête de script.
+| Vendor | OUI prefixes |
+|---|---|
+| **Dahua** | 9 |
+| **Foscam** | 2 |
+| **Hikvision** | 23 |
+| **Reolink** | 2 |
+| **Ring** | 2 |
+| **Wyze** | 5 |
 
-> 💡 **Marques no-name (AliExpress/Amazon)** : la plupart (JOOKACE, Bextgoo, TANGMI, pokurui, Nisanmoon, keft, LXMIMI, Digimore, ViiRou, ULEXOR, Voltvera, Swiftctrl, SecuraLen, Yadayuki…) **ne diffusent pas leur nom de marque** — elles réutilisent une app P2P partagée. Repère l'**app** (imprimée sur la boîte / dans l'App Store) : `UBox_` → **UBox**, `LLM_` → **Linklemo**, `MVxxxxxxxx` → **V380**, `ACCQ`/`CAMS_` → **A9/JXLCAM**, `IPCAM-` → **CamHi**, `EZVIZ_` → **EZVIZ**. Si l'app apparaît dans la liste ci-dessus, la caméra est couverte.
-- 🟡 **POSSIBLE — OUI de marque** : **Hikvision, Dahua, Reolink, Wyze, Foscam, Ring** (43 préfixes ; extensible). Marques « routeur d'abord » (TP-Link/Tapo) **exclues** volontairement — leur OUI en scan d'AP = aimant à faux positifs.
+> Router-first brands (**TP-Link / Tapo**) are **excluded on purpose** — on an AP scan their OUI is a false-positive magnet.
 
-> ⚠️ **Limite honnête** : on ne voit une caméra que si elle **diffuse un WiFi** (mode appairage/AP, ou fraîchement branchée). Une caméra **déjà appairée** est un simple **client** (pas de SSID) → **invisible** en scan d'AP. Pour celles-là : mode **promiscuous** (firmware) ou un **détecteur d'objectif** (LED IR). Les no-name utilisent des chipsets génériques (HiSilicon/Espressif) → l'**OUI seul reste faible**, le **SSID est le vrai signal**.
+### Brand / keyword matches (LIKELY tier)
 
-Enrichis `CAM_SSID_CONF`, `CAM_SSID_LIKE` et `CAM_OUI` en tête du script.
+`anbiux` · `anran` · `camera` · `camhi` · `carecam` · `cctv` · `cloudedge` · `coolcam` · `escam` · `ezviz` · `foscam` · `fredi` · `ftycam` · `genbolt` · `hdminicam` · `hdsmartipc` · `hopeway` · `icsee` · `iegeek` · `imcam` · `ipcam` · `iwfcam` · `linklemo` · `littlestars` · `lookcam` · `minicam` · `naxclow` · `netcam` · `okam` · `ptz` · `reolink` · `smartcam` · `smartlife` · `spycam` · `sricam` · `tinycam` · `tutk` · `tuya` · `ubox` · `ucocare` · `ular` · `v380` · `vstarcam` · `webcam` · `wificam` · `wiwacam` · `xiaoin` · `chuangmi` · `xmeye` · `ycc365` · `yoosee` · `zosi`
+<!-- BRANDS_TABLE_END -->
 
-## 🚀 Installation
+The full list, with counts and detection tags, is browsable on-device under **Cam list → Brands & models**.
 
-1. Copie **`Flock Detector.js`** sur la carte SD, dans un dossier que Bruce lit : **`/BruceJS`**, `/scripts` ou `/BruceScripts`.
-2. Sur l'appareil : **JS Interpreter** → ouvre `Flock Detector.js`.
-3. **Choisis le mode** (Hidden cams / Flock / Both).
-4. **Maintiens le bouton ESC / retour** pour quitter (le scan WiFi bloque ~4 s ; une fenêtre réactive capte l'appui entre deux scans).
+## 🌐 LAN cams — cameras already on the Wi-Fi
 
-## 🔎 Signatures & sources
+The RF scan only sees a camera that **broadcasts an AP** (pairing/setup mode). A camera **already paired** is a silent Wi-Fi **client** with no SSID → invisible to an AP scan. **LAN cams** covers that blind spot: while the LilyGO is connected to a Wi-Fi, it sweeps the subnet and flags **camera hosts** by their **open ports** (`554`/`8554` RTSP, `37777` Dahua, `34567` XiongMai, `8000` Hikvision, `8899` ONVIF) and their **HTTP banner** (Hikvision/Dahua/Reolink/Foscam/ONVIF…).
 
-- **32 OUIs corroborés** (`OUI_CONF`) — recherche promiscuous de **[@NitekryDPaul](https://github.com/nitekry/nite-oui-collection)** (`my_tested_flock`, synchro **2026-07-16**) + le 32ᵉ (`82:6b:f2`) du drive-testing **[DeFlockJoplin](https://github.com/DeflockJoplin/flock-you)**.
-- **6 OUIs seed** (`OUI_SEED`) — candidats **non vérifiés terrain** de **[FlipDeFlock](https://github.com/ReconGrunt/FlipDeFlock)** / WatchFlock.
-- **Règles SSID** : `Flock-XXXXXX` (ancré) et `test_flck` (dev, **CVE-2025-59409**) = confirmés ; `flock` (sous-chaîne) = probable.
-- *(Signal BLE : réservé à une future version firmware — l'API `ble.scan` de Bruce ne donne pas les fingerprints IE nécessaires.)*
+> ⚠️ **Firmware limits.** Bruce's JS only exposes `httpFetch` (no raw sockets, no UDP, no ARP) → detection is **ports + banner only, without OUI/MAC**, and there's **no ONVIF WS-Discovery**. The connect timeout **can't be shortened**, so a dead IP is slow. The fix isn't "skip dead IPs" (you only know an IP is dead *after* the timeout) — it's to **probe far fewer**: a **window around our own IP** (`LAN_SPAN`, ±25) + the gateway (DHCP clusters addresses there), and **one probe per IP**. During a blocking probe the JS engine is frozen, so **hold ESC** — it stops as soon as the current probe returns.
 
-**Caméras (mode Hidden Cams)** : patterns SSID de setup/AP des apps P2P grand public (V380 `MV+8`, Yoosee `GW_IPC/GW_AP`, A9/JXLCAM `ACCQ/CAMS_/JXLCAM`, HDWiFiCam, V720), marques (Tuya/SmartLife, YCC365, CloudEdge, iCSee/XMEye, Xiaomi) et OUIs Hikvision. Bases OUI surveillance : **[colonelpanichacks/ouispy-detector](https://github.com/colonelpanichacks/ouispy-detector)**, **[FlipDeFlock](https://github.com/ReconGrunt/FlipDeFlock)**.
+## 📋 Cam list & updating the database
 
-Tu peux enrichir `OUI_CONF`, `OUI_SEED`, `CAM_SSID_CONF`, `CAM_SSID_LIKE`, `CAM_OUI` en tête du script. Autres bases : **[colonelpanichacks/flock-you](https://github.com/colonelpanichacks/flock-you)**, **[deflock.me](https://deflock.me)**.
+**Cam list → Brands & models** shows the total signature count and the sorted brand/model catalog, each tagged **SSID** / **OUI** / **SSID+OUI**.
 
-## ⚠️ Portée & limites (honnêtes)
+The signatures also live in **[`sigs.json`](sigs.json)**. To **add cameras without re-editing the script**, drop a **`flock_sigs.json`** at the **SD-card root** (only the *new* entries) — it is **loaded and merged at boot** (`loadCachedSigs`), de-duplicated. New total shows up in **Cam list**.
 
-- Cette version JS voit les équipements qui **diffusent un réseau WiFi visible** (beacon/AP). Le détecteur de référence attrape aussi les **probe requests** via le **mode promiscuous** — ça nécessite un **module firmware** (upgrade possible).
-- Les OUIs génériques (Espressif) peuvent générer des **faux positifs** : un hit **OUI seul** est marqué *« à confirmer »*, un hit **SSID:flock** est fiable.
-- Outil de **sensibilisation / recherche vie privée**. Respecte la loi locale.
+> ℹ️ **Why SD and not internet?** GitHub is HTTPS-only and the ESP32 **TLS stack often fails on Bruce** (`Connection refused`). The SD update needs **no network** and always works.
 
-## 🧭 Angle mort & méthodes complémentaires
+`sigs.json` format: `cam_ssid_conf` `[["regex","label"]]`, `cam_ssid_like` `[["substr","label"]]`, `cam_oui` `[["oui","vendor"]]`, `flock_oui` `["oui"]`, `flock_seed` `["oui"]`.
 
-Cet outil détecte le **RF WiFi** : une caméra qui **diffuse un AP** (mode appairage) ou dont la MAC apparaît. Il **ne voit pas** une caméra **déjà appairée** (simple client silencieux) ni une caméra **offline** qui enregistre sur carte SD sans émettre. Pour ces cas, d'**autres méthodes** existent — complémentaires, pas concurrentes :
+## 🔎 Sources
 
-| Méthode | Principe | Attrape notre angle mort ? | Réf. |
+- **Flock OUIs** — [@NitekryDPaul](https://github.com/nitekry/nite-oui-collection) promiscuous research (`my_tested_flock`, synced 2026-07-16) + [DeFlockJoplin](https://github.com/DeflockJoplin/flock-you); seed set from [FlipDeFlock](https://github.com/ReconGrunt/FlipDeFlock) / WatchFlock. SSID rules: `Flock-XXXXXX`, `test_flck` (CVE-2025-59409).
+- **Camera OUIs** — [colonelpanichacks/ouispy-detector](https://github.com/colonelpanichacks/ouispy-detector), [room-sweep](https://github.com/grahamandre23-lang/room-sweep), [camera-detector](https://github.com/ranjansinghx/camera-detector).
+- **Camera SSID prefixes** — public setup guides (qztsecurity, manuals.plus, vendor docs) and the naxclow / a9-v720 research.
+- *(BLE signatures need promiscuous IE fingerprints not exposed by Bruce's `ble.scan` — left to a future firmware module.)*
+
+## 🧩 Blind spot & complementary methods
+
+This tool sees **RF Wi-Fi** only. A camera **already paired** (silent client) or **offline** (records to SD, emits nothing) is invisible to it. Other methods cover those — complementary, not competing:
+
+| Method | Principle | Catches our blind spot? | Ref. |
 |---|---|---|---|
-| **RF / WiFi — scan AP** (cet outil) | scan des AP + OUI/SSID | — | ce repo |
-| **Scan LAN** (cet outil, mode LAN cams **et** PC) | même réseau : ports (554 RTSP…) + bannière ; version PC : nmap + mDNS/ONVIF + OUI | ✅ cam **appairée sur ce WiFi** | ce repo, [room-sweep](https://github.com/grahamandre23-lang/room-sweep), [camera-detector](https://github.com/ranjansinghx/camera-detector) |
-| **Optique (ToF/LiDAR)** | reflet rétro-réfléchi de l'objectif via le capteur ToF d'un smartphone | ✅ **toute** cam, même offline | [LAPD](https://github.com/frizensami/lapd) (ACM SenSys 2021) |
-| **Thermique (IA)** | signature de chaleur de la cam via caméra thermique + réseau de neurones | ✅ **toute** cam, même offline | [HeatDeCam](https://heatdecam.github.io/) |
-| **Vision (ML)** | webcam + détection d'objets (TensorFlow COCO-SSD) | ⚠️ visuel, faible | [Spy_Cam_Detection](https://github.com/tanishqshah2/Spy_Cam_Detection) |
-| **Détecteur d'objectif IR** | LED IR + œil : l'objectif renvoie un point brillant | ✅ cam offline, bon marché | matériel dédié |
+| **RF / Wi-Fi AP scan** (this tool) | scan APs + OUI/SSID | — | this repo |
+| **LAN scan** (this tool's LAN mode **and** PC tools) | same network: ports (554 RTSP…) + banner; PC: nmap + mDNS/ONVIF + OUI | ✅ camera **paired on that Wi-Fi** | this repo, [room-sweep](https://github.com/grahamandre23-lang/room-sweep), [camera-detector](https://github.com/ranjansinghx/camera-detector) |
+| **Optical (ToF/LiDAR)** | lens retro-reflection via a phone's ToF sensor | ✅ **any** camera, even offline | [LAPD](https://github.com/frizensami/lapd) (ACM SenSys 2021) |
+| **Thermal (ML)** | camera heat signature via thermal cam + neural net | ✅ **any** camera, even offline | [HeatDeCam](https://heatdecam.github.io/) |
+| **Vision (ML)** | webcam + object detection (TensorFlow COCO-SSD) | ⚠️ visual, weak | [Spy_Cam_Detection](https://github.com/tanishqshah2/Spy_Cam_Detection) |
+| **IR lens finder** | IR LED + eye: the lens returns a bright dot | ✅ offline cams, cheap | dedicated hardware |
 
-Les OUI Hikvision/Dahua/Reolink/Wyze/Foscam/Ring de la base viennent en partie des projets de scan LAN ci-dessus.
+## 🛒 Hardware
 
-## 🛒 Matériel / Hardware
+The gear used for this project — Amazon affiliate links:
 
-Le matériel utilisé pour ce projet — liens affiliés Amazon :
-
-| [<img src="docs/hw-lilygo.jpg" width="200" alt="LilyGO T-Embed CC1101 avec antennes">](https://link.amazon/B0cgD7wou) | [<img src="docs/hw-lilygo-black.jpg" width="200" alt="LilyGO T-Embed CC1101 noir">](https://link.amazon/B071fmsbH) | [<img src="docs/hw-antenna.jpg" width="200" alt="Kit d'antennes SMA">](https://link.amazon/B0eMlSqeZ) |
+| [<img src="docs/hw-lilygo.jpg" width="200" alt="LilyGO T-Embed CC1101 with antennas">](https://link.amazon/B0cgD7wou) | [<img src="docs/hw-lilygo-black.jpg" width="200" alt="LilyGO T-Embed CC1101 black">](https://link.amazon/B071fmsbH) | [<img src="docs/hw-antenna.jpg" width="200" alt="SMA antenna kit">](https://link.amazon/B0eMlSqeZ) |
 |:---:|:---:|:---:|
-| 🔌 **[LilyGO T-Embed CC1101](https://link.amazon/B0cgD7wou)**<br><sub>avec antennes</sub> | ⬛ **[LilyGO T-Embed CC1101](https://link.amazon/B071fmsbH)**<br><sub>noir, sans antenne</sub> | 📡 **[Kit d'antennes SMA](https://link.amazon/B0eMlSqeZ)** |
+| 🔌 **[LilyGO T-Embed CC1101](https://link.amazon/B0cgD7wou)**<br><sub>with antennas</sub> | ⬛ **[LilyGO T-Embed CC1101](https://link.amazon/B071fmsbH)**<br><sub>black, no antenna</sub> | 📡 **[SMA antenna kit](https://link.amazon/B0eMlSqeZ)** |
 
-<sub>En tant que Partenaire Amazon, je réalise un bénéfice sur les achats remplissant les conditions requises. · As an Amazon Associate I earn from qualifying purchases.</sub>
+<sub>As an Amazon Associate I earn from qualifying purchases.</sub>
 
-## ☕ Un café ?
+## ☕ Buy me a coffee?
 
 <img src="docs/paypal-qr.png" width="180" alt="PayPal" />
 
-## 📄 Licence
+## 📄 License
 
-MIT — voir [LICENSE](LICENSE). Par **koua29**. Signatures : projet flock-you / deflock.me.
+MIT — see [LICENSE](LICENSE). By **koua29**. Runs on the excellent [Bruce firmware](https://github.com/pr3y/Bruce). Defensive / authorized use only.

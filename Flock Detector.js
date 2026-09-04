@@ -79,10 +79,12 @@ var CAM_SSID_CONF = [
   [/^ezviz[-_]/,       "EZVIZ"],       // EZVIZ_<serial> (Hikvision sub-brand)
   [/^ubox_/,           "UBox"],        // UBox app (Javiscam...): UBox_XXXX
   [/^llm_/,            "Linklemo"],    // Linklemo app (A9 clones): LLM_XXXX
-  [/^fty/,             "FtyCam"],      // FtyCam/FtyCamPro: FTY....
+  [/^fty/,             "FtyCam"],      // FtyCam/FtyCamPro/FtyCamBq: FTY....
   [/^@mc/,             "O-KAM"],       // O-KAM (Tuya): @MCXXXX
   [/^ipc_ap/,          "Zosi"],        // Zosi: IPC_AP_XXXX
-  [/^ring[ _-]?setup/, "Ring"]         // Ring doorbell/cam setup AP
+  [/^ring[ _-]?setup/, "Ring"],        // Ring doorbell/cam setup AP
+  [/^nax_/,            "Naxclow"],     // A9/V720 naxclow: Nax_2100002...
+  [/^ipc[-_]/,         "IPcam"]        // HopeWay & generic IPC- / IPC_ (last: less specific)
 ];
 // LIKELY: brand / keyword substrings (weaker but still cam-ish).
 // [substring, brand]. Kept to camera-specific compound words.
@@ -95,7 +97,10 @@ var CAM_SSID_LIKE = [
   ["hdsmartipc","HDSmartIPC"], ["reolink","Reolink"], ["ezviz","EZVIZ"], ["ubox","UBox"],
   ["linklemo","Linklemo"], ["ular","ULar"], ["ucocare","UCOCARE"], ["wiwacam","WIWACAM"],
   ["hdminicam","HDMiniCam"], ["ftycam","FtyCam"], ["o-kam","O-KAM"], ["okam","O-KAM"],
-  ["zosi","Zosi"], ["vstarcam","VStarcam"], ["coolcam","Coolcam"], ["ipcamera","IPcam"],
+  ["zosi","Zosi"], ["vstarcam","VStarcam"], ["coolcam","Coolcam"], ["tuya","Tuya"],
+  ["carecam","CareCam"], ["littlestars","LittleStars"], ["hopeway","HopeWay"],
+  ["naxclow","Naxclow"], ["imcam","iMCam"], ["tutk","TUTK"], ["xiaoin","XiaoIn"],
+  ["iwfcam","iWFCam"], ["ipcamera","IPcam"],
   ["ipcam","IPcam"], ["webcam","Webcam"], ["spycam","SpyCam"], ["wificam","WiFiCam"],
   ["netcam","NetCam"], ["smartcam","SmartCam"], ["minicam","MiniCam"], ["ptz","PTZ-cam"],
   ["cctv","CCTV"], ["camera","camera"]
@@ -415,9 +420,9 @@ function MENU(){ return [
       { ic:icoEye,   s:"Both",         sub:(CAM_DB+FLOCK_DB) + " signatures", val:"both"  } ] },
   { ic:icoNet,  s:"LAN scan", rows:[
       { ic:icoNet,   s:"Camera hosts", sub:"scan connected WiFi",             val:"lan"   } ] },
-  { ic:icoDb,   s:"Database", rows:[
-      { ic:icoDb,    s:"Update cams",  sub:"download from GitHub",            val:"update"},
-      { ic:icoEye,   s:"Show counts",  sub:"current DB sizes",                val:"counts"} ] }
+  { ic:icoDb,   s:"Cam list", rows:[
+      { ic:icoDb,    s:"Brands & models", sub:CAM_DB + " cam signatures",     val:"camlist" },
+      { ic:icoPlate, s:"Flock signals",   sub:FLOCK_DB + " signatures",       val:"flocklist" } ] }
 ];}
 
 // generic vertical list picker; returns index, or -1 on ESC/back.
@@ -456,16 +461,72 @@ function navMenu(){
     return cat.rows[si].val;
   }
 }
-function showCounts(){
-  purgeKeys(); header("DB COUNTS", "koua29");
-  at(6,34,"Cameras (WiFi): " + CAM_DB, WHITE);
-  at(6,48,"  SSID confirmed: " + CAM_SSID_CONF.length, DIM);
-  at(6,60,"  brand/keyword:  " + CAM_SSID_LIKE.length, DIM);
-  at(6,72,"  brand OUIs:     " + CAM_OUI.length, DIM);
-  at(6,90,"Flock (ALPR):   " + FLOCK_DB, WHITE);
-  at(6,108,"Update via Database > Update cams", GREY);
-  footer("press ESC");
-  while (!keyboard.getEscPress()) delay(60);
+// build the camera catalog: unique brand/model -> how it's detected.
+function catalogRows(){
+  var map = {}, order = [], i, k;
+  function add(label, kind){
+    if (!label) return;
+    if (!map[label]){ map[label] = { ssid:false, oui:false }; order.push(label); }
+    map[label][kind] = true;
+  }
+  for (i=0;i<CAM_SSID_CONF.length;i++) add(CAM_SSID_CONF[i][1], "ssid");
+  for (i=0;i<CAM_SSID_LIKE.length;i++) add(CAM_SSID_LIKE[i][1], "ssid");
+  for (i=0;i<CAM_OUI.length;i++)       add(CAM_OUI[i][1], "oui");
+  order.sort(function(a,b){ var x=a.toLowerCase(), y=b.toLowerCase(); return x<y?-1:x>y?1:0; });
+  var rows = [];
+  for (i=0;i<order.length;i++){
+    k = order[i]; var t = map[k];
+    var tag = (t.ssid && t.oui) ? "SSID+OUI" : t.oui ? "OUI" : "SSID";
+    rows.push({ name:k, tag:tag });
+  }
+  return rows;
+}
+// scrollable catalog viewer (rotate = scroll, ESC = back).
+function scrollCatalog(title, right, header2, rows){
+  var LH = 13, top0 = 44, top = 0, dirty = true;
+  var per = Math.floor((H() - top0 - 16) / LH); if (per < 1) per = 1;
+  var max = Math.max(0, rows.length - per);
+  purgeKeys();
+  while (true){
+    if (dirty){
+      header(title, right);
+      at(6, 29, header2, ACCENT);
+      for (var i=0;i<per;i++){
+        var idx = top + i; if (idx >= rows.length) break;
+        var y = top0 + i*LH, r = rows[idx];
+        at(10, y, r.name, WHITE);
+        at(W()-56, y, r.tag, r.tag==="OUI"?AMBER:r.tag==="SSID+OUI"?GREEN:ACCENT);
+      }
+      if (rows.length > per){                       // scrollbar
+        var th = per*LH, bh = Math.max(10, Math.round(th*per/rows.length));
+        var by = top0 + Math.round((th-bh)*(max?top/max:0));
+        display.drawFastVLine(W()-4, top0, th, DIM);
+        display.drawFillRect(W()-5, by, 3, bh, ACCENT);
+      }
+      footer("rotate=scroll   ESC=back"); dirty = false;
+    }
+    if (keyboard.getPrevPress()){ if (top>0){ top--; dirty=true; } }
+    else if (keyboard.getNextPress()){ if (top<max){ top++; dirty=true; } }
+    else if (keyboard.getSelPress()){ if (top<max){ top++; dirty=true; } }
+    else if (keyboard.getEscPress()) return;
+    delay(40);
+  }
+}
+function camList(){
+  var rows = catalogRows();
+  scrollCatalog("CAM LIST", rows.length + " brands",
+    CAM_DB + " signatures (" + CAM_SSID_CONF.length + " SSID+" + CAM_SSID_LIKE.length + " kw+" + CAM_OUI.length + " OUI)",
+    rows);
+}
+function flockList(){
+  var rows = [
+    { name:"SSID Flock-XXXXXX", tag:"SSID" },
+    { name:"SSID test_flck (CVE)", tag:"SSID" },
+    { name:"SSID ~flock", tag:"SSID" },
+    { name:OUI_CONF.length + " corroborated OUIs", tag:"OUI" },
+    { name:OUI_SEED.length + " seed OUIs (unverified)", tag:"OUI" }
+  ];
+  scrollCatalog("FLOCK LIST", "ALPR", FLOCK_DB + " Flock signatures", rows);
 }
 
 // startup: load any cached signature update from SD, then run the menu.
@@ -473,8 +534,8 @@ loadCachedSigs();
 var picked;
 while (true){
   picked = navMenu();
-  if (picked === "update"){ updateCams(); continue; }
-  if (picked === "counts"){ showCounts(); continue; }
+  if (picked === "camlist"){ camList(); continue; }
+  if (picked === "flocklist"){ flockList(); continue; }
   break;                                          // a scan mode, or "quit"
 }
 var RUN = (picked !== "quit");
