@@ -448,11 +448,11 @@ function listPick(title, right, hint, rows){
 function navMenu(){
   while (true){
     var cats = MENU();
-    var ci = listPick("DETECTOR v3", "koua29", "rotate=move  click=open", cats);
-    if (ci < 0) continue;                       // ESC on top level: stay
+    var ci = listPick("DETECTOR v3", "ESC=quit", "rotate=move  click=open", cats);
+    if (ci < 0) return "quit";                   // ESC on top level: exit app
     var cat = cats[ci];
-    var si = listPick(cat.s, "back=ESC", "rotate=move  click=select", cat.rows);
-    if (si < 0) continue;                        // ESC in sub: back to categories
+    var si = listPick(cat.s, "ESC=back", "rotate=move  click=select", cat.rows);
+    if (si < 0) continue;                         // ESC in sub: back to categories
     return cat.rows[si].val;
   }
 }
@@ -475,8 +475,9 @@ while (true){
   picked = navMenu();
   if (picked === "update"){ updateCams(); continue; }
   if (picked === "counts"){ showCounts(); continue; }
-  break;                                          // a scan mode was chosen
+  break;                                          // a scan mode, or "quit"
 }
+var RUN = (picked !== "quit");
 if (picked === "flock" || picked === "cam" || picked === "both" || picked === "lan") MODE = picked;
 var TITLE = MODE === "flock" ? "FLOCK RADAR" : MODE === "cam" ? "CAM RADAR"
           : MODE === "lan" ? "LAN CAMS" : "CAM+FLOCK RADAR";
@@ -487,15 +488,17 @@ var DBLABEL = MODE === "flock" ? (FLOCK_DB + " flock sigs")
             : MODE === "lan"   ? "camera ports/banners"
             : (CAM_DB + " cam + " + FLOCK_DB + " flock");
 
-// ---- splash ---------------------------------------------------
-clear();
-radar(Math.round(W()/2), 58, 30, 0.9, MODE==="flock"?AMBER:GREEN);
-display.setTextSize(2);
-var st = "SCANNING";
-at(Math.round(W()/2)-st.length*6, 98, st, ACCENT);
-display.setTextSize(1);
-at(Math.round(W()/2)-String(DBLABEL).length*3, 122, DBLABEL, GREY);
-delay(900); purgeKeys();
+// ---- splash (skipped when the user quit from the menu) --------
+if (RUN){
+  clear();
+  radar(Math.round(W()/2), 58, 30, 0.9, MODE==="flock"?AMBER:GREEN);
+  display.setTextSize(2);
+  var st = "SCANNING";
+  at(Math.round(W()/2)-st.length*6, 98, st, ACCENT);
+  display.setTextSize(1);
+  at(Math.round(W()/2)-String(DBLABEL).length*3, 122, DBLABEL, GREY);
+  delay(900); purgeKeys();
+}
 
 // ===== LAN mode ================================================
 function nowMs(){ try { return Date.now(); } catch (eN) { return ms(); } }
@@ -639,10 +642,10 @@ function drawRow(h, y, strongest){
 }
 
 // ---- LAN mode: run its own flow, then finish ------------------
-if (MODE === "lan") runLanScan();
+if (RUN && MODE === "lan") runLanScan();
 
 // ---- main loop (RF radar) -------------------------------------
-var running = (MODE !== "lan"), spin = 0;
+var running = (RUN && MODE !== "lan"), spin = 0;
 while (running) {
   var nets = wifi.scan(0) || [];
   for (var i=0;i<nets.length;i++){
@@ -688,5 +691,5 @@ while (running) {
 clear();
 checkIcon(Math.round(W()/2)-2, 66, 16, ACCENT);
 display.setTextSize(2);
-at(Math.round(W()/2)-30, 96, "DONE", ACCENT);
-if (audio) { try { audio.tone(880,80); } catch (eE) {} }
+at(Math.round(W()/2)-(RUN?30:24), 96, RUN?"DONE":"BYE", ACCENT);
+if (RUN && audio) { try { audio.tone(880,80); } catch (eE) {} }
