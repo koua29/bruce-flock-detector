@@ -33,6 +33,8 @@ flowchart TD
   C --> C2[Flock signals]
   classDef root fill:#0b3a5a,stroke:#5ac8ff,color:#eaf6ff;
   classDef cat fill:#14202c,stroke:#5ac8ff,color:#eaf6ff;
+  classDef leaf fill:#0e1620,stroke:#3a4a5a,color:#cdd9e5;
+  class W1,W2,W3,L1,C1,C2 leaf;
 ```
 
 <p align="center">
