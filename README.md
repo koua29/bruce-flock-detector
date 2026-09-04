@@ -43,6 +43,10 @@ Le **nombre de signatures dans la base** est affiché à l'écran (splash + bas 
 
 Les signatures caméra vivent aussi dans **[`sigs.json`](sigs.json)** à la racine du repo. Le menu **Database → Update cams** télécharge ce fichier depuis GitHub (`raw.githubusercontent.com/koua29/bruce-flock-detector/main/sigs.json`), **fusionne** les nouveautés dans la base en mémoire (dédupliquées) et **met en cache sur SD** (`/flock_sigs.json`). Au démarrage suivant, le cache SD est rechargé automatiquement → **plus besoin de rééditer le script** pour ajouter des caméras : il suffit que `sigs.json` soit enrichi côté repo. (Nécessite que le LilyGO soit connecté au WiFi/Internet.)
 
+> ⚠️ **Le HTTPS peut échouer sur Bruce** (la pile TLS de l'ESP32 manque parfois de RAM, et GitHub n'est accessible qu'en HTTPS). Si **Update cams** affiche `Download failed`, l'écran donne l'erreur exacte **et la parade hors-ligne, garantie** :
+>
+> **MàJ hors-ligne (sans internet)** : copie [`sigs.json`](sigs.json) sur la **carte SD** sous le nom **`/flock_sigs.json`** (racine SD) — via la WebUI Bruce ou un lecteur de carte. Il est **rechargé et fusionné automatiquement au démarrage** (`loadCachedSigs`). Aucun TLS requis.
+
 Format `sigs.json` : `cam_ssid_conf` `[["regex","label"]]`, `cam_ssid_like` `[["substr","label"]]`, `cam_oui` `[["oui","vendor"]]`, `flock_oui` `["oui"]`, `flock_seed` `["oui"]`.
 
 ### 🌐 Mode « LAN cams » — caméras déjà connectées au WiFi

@@ -323,8 +323,12 @@ function waitOrQuit(bestRssi, tier){
 function purgeKeys(){ for (var i=0;i<6;i++){ keyboard.getAnyPress(); delay(8); } }
 
 // ===== downloadable signature DB (GitHub) ======================
-var SIGS_URL   = "https://raw.githubusercontent.com/koua29/bruce-flock-detector/main/sigs.json";
+var SIGS_URLS  = [   // tried in order (raw first, jsdelivr TLS fallback)
+  "https://raw.githubusercontent.com/koua29/bruce-flock-detector/main/sigs.json",
+  "https://cdn.jsdelivr.net/gh/koua29/bruce-flock-detector@main/sigs.json"
+];
 var SIGS_CACHE = "/flock_sigs.json";     // SD cache (persists across runs)
+                                         // Offline update: drop this file on SD.
 
 function hasSub(arr, s){ for (var i=0;i<arr.length;i++) if (arr[i][0]===s) return true; return false; }
 function hasRe(arr, src){ for (var i=0;i<arr.length;i++) if (arr[i][0].source===src) return true; return false; }
@@ -366,15 +370,22 @@ function updateCams(){
   }
   at(6,34,"downloading sigs.json ...",WHITE);
   radar(W()-40,50,20,0.9,ACCENT);
-  footer("please wait");
-  var body = "";
-  try {
-    var r = wifi.httpFetch(SIGS_URL, { method:"GET" });
-    body = "" + (r.body || "");
-  } catch (eU){ body = ""; }
+  footer("please wait (TLS)");
+  var body = "", err = "";
+  for (var u=0; u<SIGS_URLS.length && !body; u++){
+    try {
+      var r = wifi.httpFetch(SIGS_URLS[u], { method:"GET" });
+      body = "" + (r.body || "");
+      if (!body) err = "empty body (status " + (r.status || "?") + ")";
+    } catch (eU){ err = ("" + eU); }
+  }
   header("UPDATE CAMS", "github");
   if (!body){
-    at(6,34,"Download failed.",RED); at(6,50,"Check internet / URL.",GREY);
+    at(6,34,"Download failed:",RED);
+    at(6,48,(err || "unknown").substring(0,40),GREY);
+    at(6,64,"HTTPS may fail on Bruce (TLS).",DIM);
+    at(6,78,"Offline: copy sigs.json to SD",WHITE);
+    at(6,90,"as " + SIGS_CACHE + " (loads at boot).",WHITE);
     footer("press ESC"); while (!keyboard.getEscPress()) delay(60); return;
   }
   var obj = null; try { obj = JSON.parse(body); } catch (eP){ obj = null; }
