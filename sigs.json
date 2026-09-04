@@ -1,5 +1,5 @@
 {
- "version": "2026-09-04",
+ "version": "2026-09-04.1",
  "cam_ssid_conf": [
   [
    "^mv\\d{8}$",
@@ -262,6 +262,22 @@
   [
    "camera",
    "camera"
+  ],
+  [
+   "imcam",
+   "iMCam"
+  ],
+  [
+   "tutk",
+   "TUTK"
+  ],
+  [
+   "xiaoin",
+   "XiaoIn"
+  ],
+  [
+   "iwfcam",
+   "iWFCam"
   ]
  ],
  "cam_oui": [
